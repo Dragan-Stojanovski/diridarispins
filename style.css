@@ -1185,3 +1185,8 @@ input[type="range"].calc-range { width: 100%; margin-top: .8rem; accent-color: v
 @media (max-width: 560px) { .deal-ribbon { justify-content: center; text-align: center; } .deal-ribbon .btn { width: 100%; } }
 
 .band-reassure { margin-top: .7rem; font-size: var(--step-xs); font-weight: 600; opacity: .9; }
+
+/* ===== Mobile nav fix: long menu must scroll within the viewport ===== */
+.mobile-panel { overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.mobile-panel.open { max-height: calc(100dvh - 3.5rem); }   /* JS sets an exact value; this is the fallback */
+@supports not (height: 100dvh) { .mobile-panel.open { max-height: calc(100vh - 3.5rem); } }

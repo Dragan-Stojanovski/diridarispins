@@ -2,27 +2,159 @@
 (function () {
   "use strict";
 
+  /* 0. Inject mobile-accordion styles (keeps per-page HTML untouched) */
+  (function injectAccCss() {
+    var css = [
+      ".mobile-panel .m-acc{padding:.3rem var(--gutter) .8rem;}",
+      ".mobile-panel .m-home{display:block;padding:.9rem .2rem;font-weight:700;color:var(--nocht);border-bottom:1px solid var(--rand);}",
+      ".mobile-panel .m-home[aria-current=\"page\"]{color:var(--almrot);}",
+      ".mobile-panel .m-acc-item{border-bottom:1px solid var(--rand);}",
+      ".mobile-panel .m-acc-btn{display:flex;width:100%;justify-content:space-between;align-items:center;gap:.5rem;background:none;border:0;padding:.95rem .2rem;font-family:inherit;font-size:var(--step-sm);font-weight:700;color:var(--nocht);cursor:pointer;text-align:left;}",
+      ".mobile-panel .m-acc-btn .m-chev{transition:transform .2s ease;flex:none;color:var(--loden);}",
+      ".mobile-panel .m-acc-item.open>.m-acc-btn{color:var(--almrot);}",
+      ".mobile-panel .m-acc-item.open>.m-acc-btn .m-chev{transform:rotate(180deg);color:var(--almrot);}",
+      ".mobile-panel .m-acc-panel{display:none;padding:0 0 .7rem;}",
+      ".mobile-panel .m-acc-item.open>.m-acc-panel{display:block;}",
+      ".mobile-panel .m-acc-panel .m-sub{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--almrot);font-weight:700;padding:.7rem .2rem .15rem;}",
+      ".mobile-panel .m-acc-panel a{display:block;padding:.6rem .2rem .6rem .9rem;font-weight:600;color:var(--nocht);border-bottom:1px solid var(--rand);font-size:var(--step-sm);}",
+      ".mobile-panel .m-acc-panel a.m-all{color:var(--almrot);font-weight:700;padding-left:.2rem;}"
+    ].join("");
+    var el = document.createElement("style");
+    el.setAttribute("data-diridari", "mobile-acc");
+    el.textContent = css;
+    (document.head || document.documentElement).appendChild(el);
+  })();
+
   /* 1. Mobile menu */
   var toggle = document.querySelector(".nav-toggle");
   var panel = document.getElementById("mobile-panel");
   if (toggle && panel) {
+    function sizePanel() {
+      if (!panel.classList.contains("open")) return;
+      // Cap the panel to the space between its top and the bottom of the
+      // viewport so the menu scrolls internally instead of being clipped
+      // by the sticky header.
+      var top = panel.getBoundingClientRect().top;
+      panel.style.maxHeight = Math.max(120, window.innerHeight - top) + "px";
+    }
+    function openMenu() {
+      panel.classList.add("open");
+      toggle.setAttribute("aria-expanded", "true");
+      sizePanel();
+    }
+    function closeMenu() {
+      panel.classList.remove("open");
+      panel.style.maxHeight = "";
+      toggle.setAttribute("aria-expanded", "false");
+      // collapse any expanded accordion section
+      Array.prototype.forEach.call(panel.querySelectorAll(".m-acc-item.open"), function (it) {
+        it.classList.remove("open");
+        var b = it.querySelector(".m-acc-btn");
+        if (b) b.setAttribute("aria-expanded", "false");
+      });
+    }
+
+    /* Transform the flat group list into a collapsing accordion:
+       top-level sections (Online Casinos / Boni / Banking) closed by default;
+       tapping one expands it and collapses the others. Links are MOVED, so
+       each page keeps its own correct relative URLs. */
+    function buildAccordion() {
+      var ul = panel.querySelector("ul");
+      if (!ul || panel.querySelector(".m-acc")) return;
+      var groups = ul.querySelectorAll("li.m-group");
+      if (!groups.length) return;
+
+      var buckets = { oc: [], boni: [], bank: [] };
+      var homeA = ul.querySelector("li:not(.m-group) a");
+
+      Array.prototype.forEach.call(groups, function (li) {
+        var span = li.querySelector("span");
+        var label = span ? span.textContent.replace(/\s+/g, " ").trim() : "";
+        var links = Array.prototype.slice.call(li.querySelectorAll("a"));
+        var cat = "oc";
+        if (label.indexOf("Boni") === 0) cat = "boni";
+        else if (label.indexOf("Banking") === 0) cat = "bank";
+        else if (label.indexOf("Online Casinos") === 0) cat = "oc";
+        var sub = null, foot = false;
+        if (label.indexOf("·") !== -1) sub = label.split("·").pop().trim();
+        else if (label === "Boni" || label === "Banking" || label === "Online Casinos") foot = true;
+        else sub = label; // e.g. "Zahlung & Auszahlung", "Nach Feature"
+        buckets[cat].push({ sub: sub, links: links, foot: foot });
+      });
+
+      function panelFor(id) {
+        var wrap = document.createElement("div");
+        wrap.className = "m-acc-panel";
+        wrap.id = "macc-" + id;
+        buckets[id].forEach(function (g) {
+          if (g.foot) {
+            g.links.forEach(function (aEl) { aEl.className = "m-all"; wrap.appendChild(aEl); });
+            return;
+          }
+          if (g.sub) {
+            var h = document.createElement("span");
+            h.className = "m-sub";
+            h.textContent = g.sub;
+            wrap.appendChild(h);
+          }
+          g.links.forEach(function (aEl) { wrap.appendChild(aEl); });
+        });
+        return wrap;
+      }
+
+      var acc = document.createElement("nav");
+      acc.className = "m-acc";
+      acc.setAttribute("aria-label", "Mobile Navigation");
+
+      if (homeA) { homeA.className = "m-home"; acc.appendChild(homeA); }
+
+      [["oc", "Online Casinos"], ["boni", "Boni"], ["bank", "Banking"]].forEach(function (d) {
+        var id = d[0];
+        var item = document.createElement("div");
+        item.className = "m-acc-item";
+        var btn = document.createElement("button");
+        btn.className = "m-acc-btn";
+        btn.type = "button";
+        btn.setAttribute("aria-expanded", "false");
+        btn.setAttribute("aria-controls", "macc-" + id);
+        btn.innerHTML = d[1] + ' <svg class="m-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+        item.appendChild(btn);
+        item.appendChild(panelFor(id));
+        acc.appendChild(item);
+      });
+
+      panel.replaceChild(acc, ul);
+
+      var accBtns = acc.querySelectorAll(".m-acc-btn");
+      Array.prototype.forEach.call(accBtns, function (btn) {
+        btn.addEventListener("click", function () {
+          var item = btn.parentNode;
+          var isOpen = item.classList.contains("open");
+          Array.prototype.forEach.call(accBtns, function (b) {
+            b.parentNode.classList.remove("open");
+            b.setAttribute("aria-expanded", "false");
+          });
+          if (!isOpen) { item.classList.add("open"); btn.setAttribute("aria-expanded", "true"); }
+          sizePanel();
+        });
+      });
+    }
+    buildAccordion();
+
     toggle.addEventListener("click", function () {
-      var open = panel.classList.toggle("open");
-      toggle.setAttribute("aria-expanded", open ? "true" : "false");
+      if (panel.classList.contains("open")) closeMenu(); else openMenu();
     });
     panel.addEventListener("click", function (e) {
-      if (e.target.tagName === "A") {
-        panel.classList.remove("open");
-        toggle.setAttribute("aria-expanded", "false");
-      }
+      if (e.target.closest("a")) closeMenu();
     });
     document.addEventListener("keydown", function (e) {
       if (e.key === "Escape" && panel.classList.contains("open")) {
-        panel.classList.remove("open");
-        toggle.setAttribute("aria-expanded", "false");
+        closeMenu();
         toggle.focus();
       }
     });
+    window.addEventListener("resize", sizePanel);
+    window.addEventListener("orientationchange", function () { setTimeout(sizePanel, 150); });
   }
 
   /* 2 + 3. Casino search + sort */
